@@ -39,7 +39,9 @@ let currentChannel;
 let currentChannelId;
 let filtered;
 let listingsPath;
-
+let tryingToConnect = true;
+let jwtTokenJson; 
+let Recordings;
 
 const getChannels = request({
 	method: 'GET',
@@ -121,10 +123,10 @@ const startMqttClient = async () => {
 		username: mqttUsername,
 		password: mqttPassword
 	});
-	
+
 	mqttClient.on('connect', function () {
 		logger.info('Connected to Ziggo MQTT server');
-		
+		tryingToConnect=false;
 		topic = mqttUsername + '/' + varClientId + '/status';
 		payload = {
 			"source": varClientId,
@@ -282,15 +284,23 @@ const startMqttClient = async () => {
 		mqttClient.on('error', function(err) {
 			logger.error(`Not connected to MQTT server!: ${err}`);
 			mqttClient.end();
+			tryingToConnect = true;
 			return false;
 		});
 
 		mqttClient.on('close', function () {
 			logger.debug('Connection closed');
 			mqttClient.end();
+			tryingToConnect = true;
 			return false;
 		});
 	});
+
+	mqttClient.on('disconnect', function () {
+		logger.info('Connection lost with Ziggo MQTT server');
+		tryingToConnect = true;
+	});
+
 };
 
 function switchChannel(channelId) {
@@ -449,19 +459,24 @@ function getCurrentProgram(url,LocationId) {
 	
 
 getSession()
-    .then(async sessionJson => {		
-		const jwtTokenJson = await getApiCall(jwtUrl,sessionJson.oespToken, sessionJson.customer.householdId);
-		const Recordings = await getApiCall(recordingsUrl,sessionJson.oespToken, sessionJson.customer.householdId);
-
-		mqttUsername = sessionJson.customer.householdId;
-		mqttPassword = jwtTokenJson.token;	
-
-		startMqttClient();
+    .then(async sessionJson => {	
+		await setupMqttConn() // Setup initial connection with ziggo	
+		//jwtTokenJson = await getApiCall(jwtUrl,sessionJson.oespToken, sessionJson.customer.householdId);
+		//Recordings = await getApiCall(recordingsUrl,sessionJson.oespToken, sessionJson.customer.householdId);
+	
+		//mqttUsername = sessionJson.customer.householdId;
+		//mqttPassword = jwtTokenJson.token;	
+	
+		//startMqttClient();
+		logger.debug("Connection established?");
+		logger.debug(!tryingToConnect);
 		
 		server.use(bodyParser.json());
 		server.use(bodyParser.urlencoded({
 			extended: true
 		})); 
+
+		server.use(connCheck);   // check if connection is established already
 
 		server.listen(config.webPort, () => {
 			logger.info(`Webserver running on port: ${config.webPort}`);
@@ -557,3 +572,25 @@ getSession()
 		});			
 				
 	});
+async function connCheck(req,res,next) {
+	logger.debug("In checkConn");
+
+	if (!tryingToConnect) 
+		next();
+	else {
+		logger.debug("Need to establish connection");
+		await setupMqttConn()
+		next();
+		}
+
+} 
+async function setupMqttConn() {
+	jwtTokenJson = await getApiCall(jwtUrl,sessionJson.oespToken, sessionJson.customer.householdId);
+	Recordings = await getApiCall(recordingsUrl,sessionJson.oespToken, sessionJson.customer.householdId);
+
+	mqttUsername = sessionJson.customer.householdId;
+	mqttPassword = jwtTokenJson.token;	
+
+	startMqttClient();
+	logger.debug("Connection established?");
+}
