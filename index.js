@@ -292,6 +292,7 @@ const startMqttClient = async () => {
 			logger.debug('Connection closed');
 			mqttClient.end();
 			tryingToConnect = true;
+			logger.debug('Setting tryingToConnect to true');
 			return false;
 		});
 	});
@@ -387,8 +388,8 @@ async function sendActionRadio(action) {
 	await new Promise(r => setTimeout(r, 1100));
 	sendKey("ArrowDown")
 	await new Promise(r => setTimeout(r, 1100));
-	sendKey("ArrowDown")
-	await new Promise(r => setTimeout(r, 1100));
+//	sendKey("ArrowDown")
+//	await new Promise(r => setTimeout(r, 1100));
 	sendKey("Enter")
 	await new Promise(r => setTimeout(r, 1100));
 	sendKey("Enter")
