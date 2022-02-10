@@ -461,23 +461,13 @@ function getCurrentProgram(url,LocationId) {
 
 getSession()
     .then(async sessionJson => {	
-		await setupMqttConn() // Setup initial connection with ziggo	
-		//jwtTokenJson = await getApiCall(jwtUrl,sessionJson.oespToken, sessionJson.customer.householdId);
-		//Recordings = await getApiCall(recordingsUrl,sessionJson.oespToken, sessionJson.customer.householdId);
-	
-		//mqttUsername = sessionJson.customer.householdId;
-		//mqttPassword = jwtTokenJson.token;	
-	
-		//startMqttClient();
-		logger.debug("Connection established?");
-		logger.debug(!tryingToConnect);
-		
+		await setupMqttConn() 
 		server.use(bodyParser.json());
 		server.use(bodyParser.urlencoded({
 			extended: true
 		})); 
 
-		server.use(connCheck);   // check if connection is established already
+		server.use(connCheck);   // Always check if connection is established already
 
 		server.listen(config.webPort, () => {
 			logger.info(`Webserver running on port: ${config.webPort}`);
@@ -585,13 +575,26 @@ async function connCheck(req,res,next) {
 		}
 
 } 
+
+
 async function setupMqttConn() {
+	logger.debug("Preparing MQTT-comnection with Ziggo");
+
 	jwtTokenJson = await getApiCall(jwtUrl,sessionJson.oespToken, sessionJson.customer.householdId);
 	Recordings = await getApiCall(recordingsUrl,sessionJson.oespToken, sessionJson.customer.householdId);
 
 	mqttUsername = sessionJson.customer.householdId;
 	mqttPassword = jwtTokenJson.token;	
 
-	startMqttClient();
-	logger.debug("Connection established?");
+    while (tryingToConnect) {
+		logger.debug("Attempting to connect to Ziggo-MQT server");
+		startMqttClient();
+		await new Promise(r => setTimeout(r, 10000)); // Wait 10 seconds to see connection-attempt worked
+		if (tryingToConnect) {
+			logger.info("Connection-attempt did not work, waiting 1 minute before retrying");
+			await new Promise(r => setTimeout(r, 60000)); // Wait 1 minute before retrying connection
+		}
+	}
+
+	logger.debug("Connection established!");
 }
